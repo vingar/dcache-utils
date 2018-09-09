@@ -1,0 +1,58 @@
+#!/usr/bin/env python
+
+import argparse
+import ConfigParser
+import sys
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+class FakeSecHead(object):
+    def __init__(self, fp):
+        self.fp = fp
+        self.sechead = '[dcache]\n'
+
+    def readline(self):
+        if self.sechead:
+            try:
+                return self.sechead
+            finally:
+                self.sechead = None
+        else:
+            return self.fp.readline()
+
+if __name__ == '__main__':
+
+    # read dcache configuration
+    config = ConfigParser.ConfigParser()
+    config.readfp(FakeSecHead(open('/etc/dcache/dcache.conf')))
+    user = config.get('dcache', 'dcache.db.user')
+    password = config.get('dcache', 'dcache.db.password')
+    host = config.get('dcache', 'dcache.db.host')
+    host = host.split(',')[0]  # Consider only the first host for now
+    url1 = 'postgresql://%(user)s:%(password)s@%(host)s/chimera' % locals()
+    url2 = 'postgresql://%(user)s:%(password)s@%(host)s/spacemanager' % locals()
+
+    # db connection
+    engine1 = create_engine(url1)
+    Session1 = sessionmaker(bind=engine1)
+    session1 = Session1()
+
+    engine2 = create_engine(url2)
+    Session2 = sessionmaker(bind=engine2)
+    session2 = Session2()
+    try:
+            query = '''select pnfsid from srmspacefile'''
+            for pnfsid, in session2.execute(query):
+                sub_query = '''select inumber2path(inumber) from t_inodes where ipnfsid = :pnfsid'''
+                found = session1.execute(sub_query,  {'pnfsid': pnfsid}).fetchone()
+                if not found:
+                     print pnfsid
+                     # delete_query = '''DELETE FROM srmspacefile WHERE pnfsid = :pnfsid'''
+                     # session2.execute(delete_query,  {'pnfsid': pnfsid})
+                     # session2.commit()
+            # n = session1.execute(query, {'poolname': poolname}).fetchone()[0]
+    finally:
+        session1.close()
+        session2.close()
+    sys.exit(0)

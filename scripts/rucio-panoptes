@@ -151,31 +151,38 @@ def _main():
         sys.exit(-1)
 
     channel = response.headers['Location']
-
     _LOGGER.info("Channel is {}".format(channel))
 
-    path = vars(args).get("inotify")
-    if path:
-        r = s.post(format(channel) + "/subscriptions/inotify", json={"path" : path})
-        if r.status_code != 201:
-            print(r)
-            print(r.headers)
-            sys.exit(-1)
-        watch = r.headers['Location']
-        _LOGGER.info("Watch on {} is {}".format(path, watch))
+    try:
+        path = vars(args).get("inotify")
+        if path:
+            r = s.post(format(channel) + "/subscriptions/inotify", json={"path" : path})
+            if r.status_code != 201:
+                print(r)
+                print(r.headers)
+                sys.exit(-1)
+            watch = r.headers['Location']
+            _LOGGER.info("Watch on {} is {}".format(path, watch))
 
-    messages = SSEClient(channel, session=s)
-    for msg in messages:
-#        print "Event {}:".format(msg.id)
-#        print "    event: {}".format(msg.event)
-#        print "    data: {}".format(msg.data)
-        data = json.loads(msg.data)
-        if data['event']['mask'] == ['IN_ATTRIB']:
-            # new file
-            name = data['event']['name']
-            new_file = storage + path + '/' + name
-            _LOGGER.info('New file detected: ' + new_file)
-            new_files.put((name, new_file))
+            messages = SSEClient(channel, session=s)
+            for msg in messages:
+                # print "Event {}:".format(msg.id)
+                # print "    event: {}".format(msg.event)
+                # print "    data: {}".format(msg.data)
+                data = json.loads(msg.data)
+                if data['event']['mask'] == ['IN_ATTRIB']:
+                    # new file
+                    name = data['event']['name']
+                    new_file = storage + path + '/' + name
+                    _LOGGER.info('New file detected: ' + new_file)
+                    new_files.put((name, new_file))
+
+    except KeyboardInterrupt:
+        print("Interrupting...")
+
+    finally:
+        print("Deleting channel")
+        s.delete(channel)
 
 if __name__ == '__main__':
     _configure_logging()
